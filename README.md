@@ -95,9 +95,12 @@ The project includes:
 
 ---
 
-## 👩‍💻 Author
+## 👩‍💻 Authors
 
 **Shreya Gupta**
+
+
 **Archisha Borah**
 
-AI & Machine Learning Enthusiast
+AI & Machine Learning Enthusiasts
+
