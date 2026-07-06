@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>GeoHealth — Disease Risk Predictor</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body { background: #0f172a; min-height: 100vh; font-family: 'Inter', sans-serif; }
+
+  .glass {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    backdrop-filter: blur(8px);
+  }
+  .input-field {
+    width: 100%;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 10px;
+    padding: 10px 14px;
+    color: #e2e8f0;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .input-field::placeholder { color: #475569; }
+  .input-field:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,0.15); }
+  .input-field.error { border-color: #ef4444; box-shadow: 0 0 0 3px rgba(239,68,68,0.15); }
+  select.input-field option { background: #1e293b; color: #e2e8f0; }
+  label { display: block; font-size: 12px; font-weight: 500; color: #94a3b8; margin-bottom: 6px; letter-spacing: 0.04em; text-transform: uppercase; }
+
+  .predict-btn {
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    color: white; font-weight: 600; font-size: 15px;
+    padding: 13px 32px; border-radius: 12px; border: none;
+    cursor: pointer; width: 100%;
+    transition: opacity 0.2s, transform 0.1s; letter-spacing: 0.02em;
+  }
+  .predict-btn:hover { opacity: 0.9; }
+  .predict-btn:active { transform: scale(0.99); }
+  .predict-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .prob-bar-track { width: 100%; background: rgba(255,255,255,0.07); border-radius: 999px; height: 8px; overflow: hidden; }
+  .prob-bar-fill { height: 100%; border-radius: 999px; transition: width 1s cubic-bezier(0.4,0,0.2,1); }
+
+  .risk-badge { display: inline-flex; align-items: center; gap: 6px; padding: 5px 14px; border-radius: 999px; font-size: 13px; font-weight: 600; letter-spacing: 0.03em; }
+  .risk-low    { background: rgba(34,197,94,0.15);  color: #4ade80; border: 1px solid rgba(34,197,94,0.25); }
+  .risk-medium { background: rgba(251,191,36,0.15); color: #fbbf24; border: 1px solid rgba(251,191,36,0.25); }
+  .risk-high   { background: rgba(239,68,68,0.15);  color: #f87171; border: 1px solid rgba(239,68,68,0.25); }
+
+  .spinner { width: 20px; height: 20px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.7s linear infinite; display: inline-block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .section-fade { animation: fadeUp 0.4s ease both; }
+  @keyframes fadeUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+
+  .error-box { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.25); border-radius: 10px; padding: 12px 16px; color: #fca5a5; font-size: 13px; display: flex; align-items: center; gap: 10px; }
+
+  .meta-chip { display: inline-flex; align-items: center; gap: 5px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 5px 10px; font-size: 12px; color: #94a3b8; }
+  .meta-chip strong { color: #cbd5e1; font-weight: 500; }
+
+  .suggestion-card { background: rgba(99, 102, 241, 0.05); border-left: 3px solid #6366f1; border-radius: 8px; padding: 12px 16px; margin-bottom: 12px; }
+
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+</style>
+</head>
+<body class="text-slate-100">
+<div class="max-w-2xl mx-auto px-4 py-10">
+
+  <div class="text-center mb-10">
+    <div class="inline-flex items-center gap-2 glass rounded-full px-4 py-2 text-xs text-indigo-300 mb-5 font-medium">
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><circle cx="6" cy="6" r="5" opacity="0.3"/><circle cx="6" cy="6" r="3"/></svg>
+      ML-Powered Prediction
+    </div>
+    <h1 class="text-4xl font-bold text-white mb-3 tracking-tight">GeoHealth Predictor</h1>
+    <p class="text-slate-400 text-sm max-w-sm mx-auto">Select your state and month — climate and demographic data is resolved automatically.</p>
+  </div>
+
+  <div class="glass rounded-2xl p-6 md:p-8 mb-6">
+    <h2 class="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-6">Location &amp; Period</h2>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-6">
+      <div>
+        <label for="state">State / Region</label>
+        <select id="state" class="input-field">
+          <option value="">Select state…</option>
+          <option>Andhra Pradesh</option><option>Arunachal Pradesh</option>
+          <option>Assam</option><option>Bihar</option><option>Chhattisgarh</option>
+          <option>Goa</option><option>Gujarat</option><option>Haryana</option>
+          <option>Himachal Pradesh</option><option>Jharkhand</option>
+          <option>Karnataka</option><option>Kerala</option>
+          <option>Madhya Pradesh</option><option>Maharashtra</option>
+          <option>Manipur</option><option>Meghalaya</option><option>Mizoram</option>
+          <option>Nagaland</option><option>Odisha</option><option>Punjab</option>
+          <option>Rajasthan</option><option>Sikkim</option><option>Tamil Nadu</option>
+          <option>Telangana</option><option>Tripura</option>
+          <option>Uttar Pradesh</option><option>Uttarakhand</option>
+          <option>West Bengal</option><option>Delhi</option>
+        </select>
+        <p id="state-err" class="text-red-400 text-xs mt-1 hidden"></p>
+      </div>
+      <div>
+        <label for="month">Month</label>
+        <select id="month" class="input-field">
+          <option value="">Select month…</option>
+          <option>January</option><option>February</option><option>March</option>
+          <option>April</option><option>May</option><option>June</option>
+          <option>July</option><option>August</option><option>September</option>
+          <option>October</option><option>November</option><option>December</option>
+        </select>
+        <p id="month-err" class="text-red-400 text-xs mt-1 hidden"></p>
+      </div>
+    </div>
+
+    <div id="data-preview" class="hidden mb-6">
+      <p class="text-xs text-slate-500 uppercase tracking-widest font-semibold mb-3">Auto-resolved parameters</p>
+      <div id="chip-row" class="flex flex-wrap gap-2"></div>
+    </div>
+
+    <div id="error-banner" class="error-box mb-5 hidden">
+      <svg width="16" height="16" fill="none" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" stroke="#f87171" stroke-width="1.5"/><path d="M8 4.5v4" stroke="#f87171" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="11" r="0.75" fill="#f87171"/></svg>
+      <span id="error-text">Something went wrong.</span>
+    </div>
+
+    <button id="predict-btn" class="predict-btn" onclick="runPrediction()">
+      <span id="btn-label">Predict Disease Risk</span>
+    </button>
+  </div>
+
+  <div id="results-section" class="hidden">
+    <div class="glass rounded-2xl p-5 mb-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 section-fade">
+      <div>
+        <p class="text-xs text-slate-500 uppercase tracking-widest font-semibold mb-1">Top Predicted Disease</p>
+        <p id="top-disease" class="text-xl font-bold text-white">—</p>
+        <p id="top-probability" class="text-sm text-slate-400 mt-0.5">—</p>
+      </div>
+      <div class="flex flex-col items-start sm:items-end gap-2">
+        <p class="text-xs text-slate-500 uppercase tracking-widest font-semibold">Risk Level</p>
+        <span id="risk-badge" class="risk-badge risk-low">—</span>
+      </div>
+    </div>
+
+    <div id="advisory-section" class="glass rounded-2xl p-6 mb-5 hidden section-fade" style="animation-delay: 0.1s;">
+      <div class="flex items-center gap-2 mb-5">
+        <span class="relative flex h-2 w-2">
+          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+          <span class="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
+        </span>
+        <h2 class="text-xs font-semibold text-slate-400 uppercase tracking-widest">Health Advisory &amp; Prevention</h2>
+      </div>
+      <div id="suggestions-list" class="grid grid-cols-1 gap-3">
+        </div>
+    </div>
+
+    <div class="glass rounded-2xl p-6 mb-5 section-fade" style="animation-delay: 0.2s;">
+      <h2 class="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-5">Top 3 Predictions</h2>
+      <div id="predictions-list" class="space-y-5"></div>
+    </div>
+    
+    <div class="glass rounded-2xl p-6 section-fade" style="animation-delay: 0.3s;">
+      <h2 class="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-5">Probability Comparison</h2>
+      <div style="position:relative;height:240px;"><canvas id="bar-chart"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Climate & demographic lookup ────────────────────────────────────────────
+const MONTH_IDX = { january:0,february:1,march:2,april:3,may:4,june:5,july:6,august:7,september:8,october:9,november:10,december:11 };
+
+const STATE_DATA = {
+  "andhra pradesh":     { t:[28,30,33,36,38,34,30,29,30,30,28,27], h:[72,68,60,55,58,72,80,82,78,74,70,68], r:[10,8,12,20,30,60,120,140,130,80,40,15],  l:[1.8,1.6,1.5,1.4,1.6,2.2,3.0,3.2,3.0,2.5,2.0,1.8], p:49386799  },
+  "arunachal pradesh": { t:[10,12,16,20,22,24,25,25,23,19,14,10], h:[78,76,74,76,80,88,92,92,88,82,76,74], r:[40,50,80,120,150,250,320,310,260,120,50,30], l:[3.5,3.2,3.0,3.2,3.8,4.5,5.0,5.0,4.8,4.0,3.6,3.4], p:1383727   },
+  "assam":             { t:[15,18,22,26,28,30,30,30,28,26,20,15], h:[82,80,76,78,80,88,92,92,88,84,80,78], r:[20,25,55,100,160,280,350,320,250,120,30,10], l:[3.2,3.0,2.8,3.0,3.5,4.2,4.8,4.8,4.5,3.8,3.2,3.0], p:31205576  },
+  "bihar":             { t:[14,17,23,30,35,34,31,30,30,28,20,15], h:[70,65,55,50,55,72,82,84,78,68,60,65], r:[15,12,10,8,25,80,180,220,180,60,15,8],   l:[1.2,1.0,0.9,0.8,1.0,1.8,2.8,3.0,2.8,2.0,1.4,1.2], p:104099452 },
+  "chhattisgarh":      { t:[18,21,26,32,36,33,29,28,29,28,22,18], h:[65,60,52,45,52,72,84,86,78,65,55,60], r:[12,10,15,12,25,120,280,310,240,60,20,10], l:[1.8,1.5,1.3,1.2,1.4,2.2,3.4,3.6,3.2,2.4,1.8,1.6], p:25545198  },
+  "goa":               { t:[26,27,29,31,32,29,27,27,27,28,28,26], h:[70,68,68,70,76,88,92,92,88,82,76,70], r:[5,2,3,8,40,500,850,680,280,80,20,5],    l:[2.2,2.0,1.8,1.8,2.0,3.0,3.8,3.8,3.5,3.0,2.5,2.2], p:1458545   },
+  "gujarat":           { t:[20,22,26,32,36,35,31,30,30,30,24,20], h:[60,56,50,44,48,68,80,82,72,60,52,56], r:[5,3,3,2,8,55,180,200,110,30,8,5],    l:[1.0,0.8,0.7,0.6,0.7,1.5,2.6,2.8,2.4,1.6,1.0,0.9], p:60439692  },
+  "haryana":           { t:[12,15,20,27,33,36,33,32,30,26,18,12], h:[72,65,55,42,38,52,70,72,60,52,55,68], r:[22,18,14,8,14,40,120,110,80,20,8,12],   l:[1.2,1.0,0.9,0.8,0.9,1.4,2.2,2.4,2.0,1.5,1.2,1.1], p:25351462  },
+  "himachal pradesh":  { t:[4,6,10,15,20,24,22,21,18,13,7,3],     h:[74,70,62,56,54,68,80,82,74,66,62,70], r:[50,60,60,30,30,60,160,180,120,30,20,40],  l:[1.4,1.2,1.2,1.5,2.0,2.8,3.2,3.2,2.8,2.0,1.6,1.4], p:6864602   },
+  "jharkhand":         { t:[14,17,23,30,34,32,29,28,29,27,20,14], h:[68,62,54,48,54,74,86,88,80,66,56,62], r:[18,15,18,15,35,120,280,320,250,70,18,10], l:[1.5,1.2,1.1,1.0,1.2,2.0,3.2,3.4,3.0,2.2,1.6,1.4], p:32988134  },
+  "karnataka":         { t:[24,26,29,32,33,28,26,26,27,27,25,23], h:[68,62,58,56,60,74,82,82,78,72,66,64], r:[5,8,12,30,70,90,130,130,180,160,40,10],   l:[2.0,1.8,1.6,1.5,1.8,2.5,3.2,3.2,3.0,2.6,2.2,1.9], p:61095297  },
+  "kerala":            { t:[27,28,30,31,30,27,26,26,27,27,27,27], h:[76,72,70,72,80,88,90,88,86,84,80,76], r:[20,15,30,80,180,650,650,400,270,250,150,40],l:[3.5,3.2,3.0,3.0,3.5,4.5,4.8,4.6,4.4,4.2,3.8,3.5], p:33406061  },
+  "madhya pradesh":    { t:[15,18,24,31,36,34,29,28,29,28,21,16], h:[66,58,48,38,42,65,80,82,72,58,48,58], r:[12,10,12,5,15,100,280,310,200,50,15,8],   l:[1.2,0.9,0.8,0.7,0.8,1.8,3.0,3.2,2.8,1.8,1.2,1.0], p:72626809  },
+  "maharashtra":       { t:[22,24,28,33,36,32,28,27,28,29,26,22], h:[62,58,52,44,48,68,80,82,74,64,56,58], r:[5,4,5,8,20,120,280,260,180,60,20,8],    l:[1.4,1.2,1.0,0.9,1.0,2.0,3.2,3.4,3.0,2.2,1.6,1.4], p:112374333 },
+  "manipur":           { t:[12,14,18,22,24,26,26,26,24,20,15,11], h:[76,74,72,76,80,86,90,90,86,80,74,72], r:[20,25,55,100,140,210,260,240,200,90,30,15], l:[2.8,2.6,2.4,2.6,3.0,3.8,4.2,4.2,4.0,3.4,3.0,2.8], p:2855794   },
+  "meghalaya":         { t:[10,12,16,20,22,24,25,25,23,18,13,9],  h:[82,80,78,80,84,90,94,94,90,84,78,76], r:[30,40,80,200,360,620,720,660,480,200,50,20],l:[3.8,3.5,3.2,3.5,4.0,4.8,5.2,5.2,5.0,4.4,3.8,3.6], p:2966889   },
+  "mizoram":           { t:[14,16,20,23,25,26,26,26,24,21,16,13], h:[78,76,74,78,82,88,92,92,88,82,76,74], r:[25,35,60,130,200,340,400,380,300,120,40,18],l:[3.2,3.0,2.8,3.0,3.5,4.2,4.6,4.6,4.4,3.8,3.2,3.0], p:1097206   },
+  "nagaland":          { t:[11,13,17,21,23,25,25,25,23,18,13,10], h:[76,74,72,76,80,86,90,90,86,80,74,72], r:[22,28,60,110,150,220,270,250,210,100,35,18],l:[2.8,2.6,2.4,2.6,3.0,3.6,4.0,4.0,3.8,3.2,2.8,2.6], p:1978502   },
+  "odisha":            { t:[20,23,28,33,36,33,30,29,30,29,24,20], h:[72,68,60,56,62,76,84,84,80,74,68,68], r:[15,18,20,22,50,140,280,320,240,120,40,15],  l:[1.8,1.6,1.4,1.3,1.6,2.4,3.4,3.6,3.2,2.6,2.0,1.8], p:41974218  },
+  "punjab":            { t:[10,13,18,26,32,36,33,32,30,26,17,11], h:[74,68,56,44,38,48,64,68,58,50,54,70], r:[26,22,20,10,14,30,110,100,70,15,6,14],    l:[1.4,1.2,1.0,0.8,0.9,1.4,2.0,2.2,1.8,1.5,1.3,1.3], p:27743338  },
+  "rajasthan":         { t:[14,17,23,30,36,38,34,32,32,30,22,14], h:[50,44,36,26,24,38,60,62,50,38,32,44], r:[8,6,5,3,5,20,80,90,50,10,4,5],     l:[0.6,0.5,0.4,0.3,0.3,0.8,1.8,2.0,1.6,0.9,0.6,0.5], p:68548437  },
+  "sikkim":            { t:[6,8,12,15,18,20,20,20,18,14,9,5],     h:[78,74,70,72,78,86,90,90,86,80,74,72], r:[28,38,58,110,180,380,450,420,340,130,42,20],l:[2.5,2.2,2.0,2.2,2.8,3.6,4.0,4.0,3.8,3.2,2.6,2.4], p:610577    },
+  "tamil nadu":        { t:[26,28,30,33,36,37,35,34,33,30,27,25], h:[72,70,64,60,60,62,70,72,76,80,76,72], r:[36,22,10,14,40,30,60,90,140,310,340,140],  l:[2.0,1.8,1.6,1.4,1.5,1.8,2.2,2.4,2.6,2.8,2.5,2.2], p:72147030  },
+  "telangana":         { t:[24,27,31,36,38,34,29,28,29,29,26,24], h:[62,56,48,44,50,70,82,82,76,68,62,60], r:[6,5,10,18,30,80,160,180,140,80,30,10],    l:[1.4,1.2,1.0,0.9,1.0,1.8,2.8,3.0,2.6,2.0,1.5,1.3], p:35003674  },
+  "tripura":           { t:[16,18,23,27,29,30,30,30,28,25,19,15], h:[82,80,76,80,84,88,92,92,88,84,80,78], r:[18,22,50,100,160,280,340,310,250,120,30,14],l:[3.0,2.8,2.6,2.8,3.2,3.8,4.2,4.2,4.0,3.5,3.0,2.8], p:3673917   },
+  "uttar pradesh":     { t:[13,16,22,29,35,36,32,31,30,27,19,13], h:[72,66,54,44,42,60,78,80,72,60,54,66], r:[18,14,10,6,14,60,180,220,160,40,12,10],   l:[1.2,1.0,0.9,0.7,0.8,1.4,2.4,2.6,2.2,1.6,1.2,1.1], p:199812341 },
+  "uttarakhand":       { t:[6,8,12,18,22,24,22,21,19,14,8,5],     h:[72,68,60,54,56,72,84,86,78,66,60,68], r:[28,30,30,20,30,80,220,240,180,50,20,28],  l:[1.8,1.5,1.4,1.6,2.2,3.0,3.8,4.0,3.5,2.5,1.8,1.6], p:10086292  },
+  "west bengal":       { t:[18,21,26,30,32,32,30,29,30,28,23,18], h:[76,72,66,68,74,84,88,88,84,80,74,72], r:[15,18,25,40,100,220,320,310,240,160,50,15], l:[2.2,2.0,1.8,1.8,2.2,3.0,3.8,3.8,3.5,3.0,2.5,2.2], p:91276115  },
+  "delhi":             { t:[13,16,22,29,35,36,31,30,29,26,18,12], h:[70,62,50,38,34,52,70,72,60,50,52,64], r:[18,16,12,6,10,50,180,200,120,14,6,10],    l:[0.8,0.6,0.5,0.4,0.5,1.0,1.8,2.0,1.6,1.0,0.7,0.7], p:16787941  },
+};
+
+function resolveClimate() {
+  const state = document.getElementById('state').value.trim().toLowerCase();
+  const month = document.getElementById('month').value.trim().toLowerCase();
+  if (!state || !month) return null;
+  const sd = STATE_DATA[state];
+  if (!sd) return null;
+  const mi = MONTH_IDX[month];
+  return { temp: sd.t[mi], humidity: sd.h[mi], rainfall: sd.r[mi], lai: sd.l[mi], population: sd.p };
+}
+
+function updatePreview() {
+  const d = resolveClimate();
+  const preview = document.getElementById('data-preview');
+  const chips   = document.getElementById('chip-row');
+  if (!d) { preview.classList.add('hidden'); return; }
+  preview.classList.remove('hidden');
+  chips.innerHTML = [
+    ['🌡', 'Temp', `${d.temp}°C`],
+    ['💧', 'Humidity', `${d.humidity}%`],
+    ['🌧', 'Rainfall', `${d.rainfall} mm`],
+    ['🌿', 'LAI', `${d.lai}`],
+    ['👥', 'Population', d.population.toLocaleString('en-IN')],
+  ].map(([icon, label, val]) =>
+    `<span class="meta-chip"><span style="font-size:13px;">${icon}</span> ${label}: <strong>${val}</strong></span>`
+  ).join('');
+}
+
+document.getElementById('state').addEventListener('change', updatePreview);
+document.getElementById('month').addEventListener('change', updatePreview);
+
+// ── UI helpers ──────────────────────────────────────────────────────────────
+let chartInstance = null;
+
+function showError(msg) { document.getElementById('error-text').textContent = msg; document.getElementById('error-banner').classList.remove('hidden'); }
+function hideError()    { document.getElementById('error-banner').classList.add('hidden'); }
+
+function setFieldError(id, msg) {
+  document.getElementById(id).classList.add('error');
+  const e = document.getElementById(id+'-err');
+  if (e) { e.textContent = msg; e.classList.remove('hidden'); }
+}
+function clearErrors() {
+  ['state','month'].forEach(id => {
+    document.getElementById(id).classList.remove('error');
+    const e = document.getElementById(id+'-err');
+    if (e) { e.textContent = ''; e.classList.add('hidden'); }
+  });
+  hideError();
+}
+
+function setLoading(on) {
+  document.getElementById('predict-btn').disabled = on;
+  document.getElementById('btn-label').innerHTML = on
+    ? '<span class="spinner"></span>'
+    : 'Predict Disease Risk';
+}
+
+function getRisk(p) {
+  if (p >= 0.7) return { label:'High',   cls:'risk-high',   dot:'#f87171' };
+  if (p >= 0.4) return { label:'Medium', cls:'risk-medium', dot:'#fbbf24' };
+  return               { label:'Low',    cls:'risk-low',    dot:'#4ade80' };
+}
+function barColor(p) { return p >= 0.7 ? '#f87171' : p >= 0.4 ? '#fbbf24' : '#4ade80'; }
+
+const MEDALS = ['🥇','🥈','🥉'];
+
+// ── New Health Suggestions Fetching ─────────────────────────────────────────
+// ── New Health Suggestions Fetching ─────────────────────────────────────────
+async function fetchSuggestions(diseaseName) {
+  const advSection = document.getElementById('advisory-section');
+  const list = document.getElementById('suggestions-list');
+  
+  advSection.classList.add('hidden');
+  list.innerHTML = '';
+
+  try {
+    const res = await fetch('http://127.0.0.1:5000/get_suggestions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ disease: diseaseName }),
+    });
+
+    if (!res.ok) return;
+
+    const data = await res.json();
+    
+    if (!data.success) return;
+    
+    const suggestions = data.suggestions;
+    const generalTips = data.general_tips;
+    
+    // Create beautiful HTML for suggestions
+    const html = `
+      <div class="space-y-4">
+        <!-- What To Do -->
+        <div class="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4">
+          <h3 class="text-emerald-400 font-semibold text-sm mb-3 flex items-center gap-2">
+            <span>📋</span> WHAT TO DO
+          </h3>
+          <ul class="space-y-2">
+            ${suggestions.what_to_do.map(item => `<li class="text-slate-300 text-sm flex items-start gap-2"><span class="text-emerald-400">•</span> ${item}</li>`).join('')}
+          </ul>
+        </div>
+        
+        <!-- Medical Attention -->
+        <div class="bg-red-500/10 border border-red-500/20 rounded-xl p-4">
+          <h3 class="text-red-400 font-semibold text-sm mb-3 flex items-center gap-2">
+            <span>🚨</span> SEEK MEDICAL HELP IF
+          </h3>
+          <ul class="space-y-2">
+            ${suggestions.medical_attention.map(item => `<li class="text-slate-300 text-sm flex items-start gap-2"><span class="text-red-400">⚠️</span> ${item}</li>`).join('')}
+          </ul>
+        </div>
+        
+        <!-- Prevention -->
+        <div class="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4">
+          <h3 class="text-blue-400 font-semibold text-sm mb-3 flex items-center gap-2">
+            <span>🛡️</span> PREVENTION TIPS
+          </h3>
+          <ul class="space-y-2">
+            ${suggestions.prevention.map(item => `<li class="text-slate-300 text-sm flex items-start gap-2"><span class="text-blue-400">✓</span> ${item}</li>`).join('')}
+          </ul>
+        </div>
+        
+        <!-- Risk Factors -->
+        <div class="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4">
+          <h3 class="text-amber-400 font-semibold text-sm mb-3 flex items-center gap-2">
+            <span>⚠️</span> RISK FACTORS
+          </h3>
+          <ul class="space-y-2">
+            ${suggestions.risk_factors.map(item => `<li class="text-slate-300 text-sm flex items-start gap-2"><span class="text-amber-400">!</span> ${item}</li>`).join('')}
+          </ul>
+        </div>
+        
+        <!-- Emergency Helplines -->
+        <div class="bg-purple-500/10 border border-purple-500/20 rounded-xl p-4">
+          <h3 class="text-purple-400 font-semibold text-sm mb-3 flex items-center gap-2">
+            <span>📞</span> EMERGENCY HELPLINES (INDIA)
+          </h3>
+          <div class="grid grid-cols-2 gap-3">
+            <div class="text-center">
+              <div class="text-2xl font-bold text-purple-400">${generalTips.emergency_helplines.Ambulance}</div>
+              <div class="text-xs text-slate-500">Ambulance</div>
+            </div>
+            <div class="text-center">
+              <div class="text-2xl font-bold text-purple-400">${generalTips.emergency_helplines['Health Helpline']}</div>
+              <div class="text-xs text-slate-500">Health Helpline</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    
+    list.innerHTML = html;
+    advSection.classList.remove('hidden');
+    
+  } catch (err) {
+    console.error("Failed to fetch health suggestions:", err);
+  }
+}
+function renderResults(predictions) {
+  const top3 = predictions.slice(0, 3);
+  if (!top3.length) { showError('No predictions returned by the server.'); return; }
+
+  const top  = top3[0];
+  const risk = getRisk(top.probability);
+
+  document.getElementById('top-disease').textContent = top.disease;
+  document.getElementById('top-probability').textContent = `Probability: ${(top.probability*100).toFixed(1)}%`;
+
+  const badge = document.getElementById('risk-badge');
+  badge.className = `risk-badge ${risk.cls}`;
+  badge.innerHTML = `<svg width="8" height="8" viewBox="0 0 8 8"><circle cx="4" cy="4" r="4" fill="${risk.dot}"/></svg> ${risk.label} Risk`;
+
+  const list = document.getElementById('predictions-list');
+  list.innerHTML = '';
+  top3.forEach((p, i) => {
+    const pct = (p.probability*100).toFixed(1);
+    const col = barColor(p.probability);
+    const div = document.createElement('div');
+    div.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="font-size:18px;">${MEDALS[i]}</span>
+          <span style="font-weight:600;font-size:15px;color:#e2e8f0;">${p.disease}</span>
+        </div>
+        <span style="font-size:14px;font-weight:600;color:${col};">${pct}%</span>
+      </div>
+      <div class="prob-bar-track">
+        <div class="prob-bar-fill" id="pb${i}" style="width:0%;background:${col};"></div>
+      </div>`;
+    list.appendChild(div);
+    requestAnimationFrame(() => setTimeout(() => {
+      const b = document.getElementById(`pb${i}`);
+      if (b) b.style.width = `${pct}%`;
+    }, 80 + i*120));
+  });
+
+  renderChart(top3);
+  
+  // Trigger health suggestions for the top result
+  fetchSuggestions(top.disease);
+
+  const sec = document.getElementById('results-section');
+  sec.classList.remove('hidden');
+  sec.scrollIntoView({ behavior:'smooth', block:'start' });
+}
+
+function renderChart(top3) {
+  if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
+  const ctx = document.getElementById('bar-chart').getContext('2d');
+  chartInstance = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: top3.map(p => p.disease),
+      datasets: [{
+        label: 'Probability (%)',
+        data: top3.map(p => parseFloat((p.probability*100).toFixed(2))),
+        backgroundColor: top3.map(p => barColor(p.probability)+'33'),
+        borderColor: top3.map(p => barColor(p.probability)),
+        borderWidth: 1.5, borderRadius: 8, borderSkipped: false,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      animation: { duration: 800, easing: 'easeOutQuart' },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor:'rgba(15,23,42,0.95)', borderColor:'rgba(255,255,255,0.1)', borderWidth:1,
+          titleColor:'#e2e8f0', bodyColor:'#94a3b8',
+          callbacks: { label: c => ` ${c.raw.toFixed(1)}% probability` }
+        }
+      },
+      scales: {
+        x: { grid:{color:'rgba(255,255,255,0.05)'}, ticks:{color:'#94a3b8',font:{size:12}}, border:{color:'rgba(255,255,255,0.05)'} },
+        y: { beginAtZero:true, max:100, grid:{color:'rgba(255,255,255,0.05)'}, ticks:{color:'#94a3b8',font:{size:11},callback:v=>`${v}%`}, border:{color:'rgba(255,255,255,0.05)'} }
+      }
+    }
+  });
+}
+
+async function runPrediction() {
+  clearErrors();
+
+  const stateVal = document.getElementById('state').value;
+  const monthVal = document.getElementById('month').value;
+
+  let ok = true;
+  if (!stateVal) {
+    setFieldError('state', 'Please select a state.');
+    ok = false;
+  }
+  if (!monthVal) {
+    setFieldError('month', 'Please select a month.');
+    ok = false;
+  }
+  if (!ok) return;
+
+  const climate = resolveClimate();
+  if (!climate) {
+    showError(`No climate data found for "${stateVal}".`);
+    return;
+  }
+
+  const payload = {
+    state: stateVal,
+    month: monthVal,
+    temp: climate.temp,
+    humidity: climate.humidity,
+    rainfall: climate.rainfall,
+    lai: climate.lai,
+    population: climate.population
+  };
+
+  setLoading(true);
+
+  try {
+    const res = await fetch('http://127.0.0.1:5000/predict', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      let msg = `Server error: status ${res.status}.`;
+      try {
+        const e = await res.json();
+        if (e.error || e.message) msg = e.error || e.message;
+      } catch (_) {}
+      showError(msg);
+      return;
+    }
+
+    const data = await res.json();
+
+    if (data.error) {
+      showError(data.error);
+      return;
+    }
+
+    if (!data.predictions || !Array.isArray(data.predictions) || data.predictions.length === 0) {
+      showError('No predictions returned from server.');
+      return;
+    }
+
+    renderResults(data.predictions);
+
+  } catch (err) {
+    showError(
+      err instanceof TypeError && err.message.includes('fetch')
+        ? 'Cannot connect to Flask backend at http://127.0.0.1:5000. Is the server running?'
+        : `Error: ${err.message}`
+    );
+  } finally {
+    setLoading(false);
+  }
+}
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !document.getElementById('predict-btn').disabled) runPrediction();
+});
+</script>
+</body>
+</html>

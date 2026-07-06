@@ -1,0 +1,24 @@
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Virtual Environment
+venv/
+env/
+.venv/
+
+# VS Code
+.vscode/
+
+# Temporary files
+tempCodeRunnerFile.py
+
+# Environment variables
+.env
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Operating System
+.DS_Store
+Thumbs.db
