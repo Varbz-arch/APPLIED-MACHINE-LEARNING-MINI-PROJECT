@@ -62,7 +62,7 @@ GEOHEALTH-AI
 Clone the repository
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/GEOHEALTH-AI.git
+(https://github.com/shreya-13g/GEOHEALTH-AI.git)
 ```
 
 Move into the project folder
