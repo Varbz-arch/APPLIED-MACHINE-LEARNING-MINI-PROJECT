@@ -103,7 +103,7 @@ GeoHealth-AI/
 Open VS Code terminal:
 
 ```bash
-git clone https://github.com/Varbz-arch/GeoHealth-AI.git
+https://github.com/Varbz-arch/APPLIED-MACHINE-LEARNING-MINI-PROJECT.git
 ```
 
 Navigate into the project:
