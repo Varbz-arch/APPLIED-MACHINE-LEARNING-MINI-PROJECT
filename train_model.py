@@ -1,35 +1,36 @@
 import pandas as pd
 import numpy as np
+from sklearn.metrics import confusion_matrix
 import matplotlib.pyplot as plt
 import seaborn as sns
 import joblib
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.model_selection import train_test_split, cross_val_score
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
-from imblearn.over_sampling import SMOTE
+from sklearn.metrics import accuracy_score, classification_report
 import warnings
 warnings.filterwarnings('ignore')
 
 print("="*60)
-print("FINAL MODEL TRAINING (SMOTE + VISUALIZATIONS)")
+print("MODELTRAINING STARTED")
 print("="*60)
 
-# -----------------------------
 # 1. LOAD DATA
-# -----------------------------
-df = pd.read_csv('india_all_states_balanced.csv')  # Use your balanced dataset
-print(f"\n✅ Loaded {len(df)} rows")
 
-# -----------------------------
-# 2. CHECK DISEASE DISTRIBUTION
-# -----------------------------
-print("\n📊 Disease distribution:")
+df = pd.read_csv("india_all_states.csv")
+
+# 2. USE TOP 3 DISEASES
+
+df.loc[df['Temperature'] > 40, 'Disease'] = 'Heatstroke'
+top_n = 3
+top_diseases = df['Disease'].value_counts().nlargest(top_n).index
+df = df[df['Disease'].isin(top_diseases)]
+
+print(f"\nUsing diseases: {list(top_diseases)}")
 print(df['Disease'].value_counts())
 
-# -----------------------------
 # 3. FEATURE ENGINEERING
-# -----------------------------
+
 month_to_num = {
     'January': 1, 'February': 2, 'March': 3, 'April': 4,
     'May': 5, 'June': 6, 'July': 7, 'August': 8,
@@ -59,9 +60,8 @@ df['Is_Summer'] = (df['Season'] == 'Summer').astype(int)
 df['Is_Monsoon'] = (df['Season'] == 'Monsoon').astype(int)
 df['Is_Winter'] = (df['Season'] == 'Winter').astype(int)
 
-# -----------------------------
 # 4. ENCODING
-# -----------------------------
+
 state_encoder = LabelEncoder()
 month_encoder = LabelEncoder()
 season_encoder = LabelEncoder()
@@ -72,11 +72,8 @@ df['Month_encoded'] = month_encoder.fit_transform(df['Month'])
 df['Season_encoded'] = season_encoder.fit_transform(df['Season'])
 df['Disease_encoded'] = disease_encoder.fit_transform(df['Disease'])
 
-print(f"\n✅ Diseases: {list(disease_encoder.classes_)}")
+# 5. FEATURES
 
-# -----------------------------
-# 5. FEATURES (18 features)
-# -----------------------------
 features = [
     'Temperature', 'Humidity', 'Rainfall', 'LAI', 'Population_Density',
     'State_encoded', 'Month_encoded',
@@ -88,122 +85,84 @@ features = [
 X = df[features]
 y = df['Disease_encoded']
 
-print(f"\n✅ Features: {len(features)} features")
+# 6. SCALING
 
-# -----------------------------
-# 6. SCALE FEATURES
-# -----------------------------
 scaler = StandardScaler()
 X_scaled = scaler.fit_transform(X)
 
-# -----------------------------
 # 7. TRAIN TEST SPLIT
-# -----------------------------
+
 X_train, X_test, y_train, y_test = train_test_split(
     X_scaled, y, test_size=0.2, random_state=42, stratify=y
 )
 
-print(f"\n📊 Training: {len(X_train)} rows")
-print(f"📊 Testing: {len(X_test)} rows")
+# 8. MODEL TRAINING (FINAL)
 
-# -----------------------------
-# 8. APPLY SMOTE (KEY FIX!)
-# -----------------------------
-print("\n🔄 Applying SMOTE to balance training data...")
-smote = SMOTE(random_state=42, k_neighbors=3)
-X_train_balanced, y_train_balanced = smote.fit_resample(X_train, y_train)
-
-print(f"   Before SMOTE: {len(X_train)}")
-print(f"   After SMOTE: {len(X_train_balanced)}")
-
-# -----------------------------
-# 9. TRAIN MODELS
-# -----------------------------
-print("\n🤖 Training Random Forest...")
 rf_model = RandomForestClassifier(
-    n_estimators=300,
+    n_estimators=500,
     max_depth=15,
     min_samples_split=10,
+    class_weight='balanced',
     random_state=42
 )
-rf_model.fit(X_train_balanced, y_train_balanced)
 
-print("🤖 Training Gradient Boosting...")
-gb_model = GradientBoostingClassifier(
-    n_estimators=200,
-    max_depth=5,
-    random_state=42
-)
-gb_model.fit(X_train_balanced, y_train_balanced)
+rf_model.fit(X_train, y_train)
+
+# Optional: try Gradient Boosting
+gb_model = GradientBoostingClassifier(n_estimators=200, max_depth=5)
+gb_model.fit(X_train, y_train)
 
 # Compare models
 rf_acc = rf_model.score(X_test, y_test)
 gb_acc = gb_model.score(X_test, y_test)
 
-print(f"\n📊 Random Forest Accuracy: {rf_acc:.2%}")
-print(f"📊 Gradient Boosting Accuracy: {gb_acc:.2%}")
+print(f"\nRandom Forest Accuracy: {rf_acc:.2%}")
+print(f"Gradient Boosting Accuracy: {gb_acc:.2%}")
 
 # Choose best
 model = rf_model if rf_acc >= gb_acc else gb_model
-print(f"✅ Using: {'Random Forest' if model == rf_model else 'Gradient Boosting'}")
+print(f" Using: {'Random Forest' if model == rf_model else 'Gradient Boosting'}")
 
-# -----------------------------
-# 10. FINAL EVALUATION
-# -----------------------------
+# 9. EVALUATION
+
 y_pred = model.predict(X_test)
 accuracy = accuracy_score(y_test, y_pred)
 
-print("\n" + "="*60)
-print(f"🎯 FINAL MODEL ACCURACY: {accuracy:.2%}")
-print("="*60)
+print(f"\n Final Accuracy: {accuracy:.2%}")
 
-# Cross-validation
 cv_scores = cross_val_score(model, X_scaled, y, cv=5)
-print(f"📊 Cross-validation accuracy: {cv_scores.mean():.2%} (+/- {cv_scores.std()*2:.2%})")
+print(f" Cross-validation accuracy: {cv_scores.mean():.2%}")
 
-print("\n📋 CLASSIFICATION REPORT:")
+print("\n Classification Report:")
 print(classification_report(y_test, y_pred, target_names=disease_encoder.classes_))
 
-# -----------------------------
-# 11. CONFUSION MATRIX 🔥
-# -----------------------------
+# 9. CONFUSION MATRIX 
+
 cm = confusion_matrix(y_test, y_pred)
 
-plt.figure(figsize=(8, 6))
+plt.figure(figsize=(6,5))
 sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
             xticklabels=disease_encoder.classes_,
             yticklabels=disease_encoder.classes_)
+
 plt.xlabel('Predicted')
 plt.ylabel('Actual')
-plt.title('Confusion Matrix - Disease Prediction')
+plt.title('Confusion Matrix')
 plt.tight_layout()
-plt.savefig('confusion_matrix.png')
 plt.show()
-print("✅ Confusion matrix saved as 'confusion_matrix.png'")
 
-# -----------------------------
-# 12. FEATURE IMPORTANCE PLOT 🔥
-# -----------------------------
 importances = model.feature_importances_
 feature_names = features
 
-# Sort by importance
-indices = np.argsort(importances)[::-1]
-
-plt.figure(figsize=(10, 8))
-plt.barh(range(len(indices)), importances[indices], color='steelblue')
-plt.yticks(range(len(indices)), [feature_names[i] for i in indices])
-plt.xlabel('Importance')
-plt.title('Feature Importance - Top Predictors')
+plt.figure(figsize=(8,5))
+plt.barh(feature_names, importances)
+plt.xlabel("Importance")
+plt.title("Feature Importance")
 plt.tight_layout()
-plt.savefig('feature_importance.png')
 plt.show()
-print("✅ Feature importance plot saved as 'feature_importance.png'")
 
-# -----------------------------
-# 13. SAVE MODEL
-# -----------------------------
-print("\n💾 Saving model and encoders...")
+# 10. SAVE MODEL
+
 joblib.dump(model, 'model.pkl')
 joblib.dump(state_encoder, 'state_encoder.pkl')
 joblib.dump(month_encoder, 'month_encoder.pkl')
@@ -212,15 +171,5 @@ joblib.dump(disease_encoder, 'disease_encoder.pkl')
 joblib.dump(features, 'features.pkl')
 joblib.dump(scaler, 'scaler.pkl')
 
-print("✅ Files saved:")
-print("   - model.pkl")
-print("   - state_encoder.pkl")
-print("   - month_encoder.pkl")
-print("   - season_encoder.pkl")
-print("   - disease_encoder.pkl")
-print("   - features.pkl")
-print("   - scaler.pkl")
-
-print("\n" + "="*60)
-print("🎉 TRAINING COMPLETE! Run: python app.py")
+print("\n Model saved successfully!")
 print("="*60)
