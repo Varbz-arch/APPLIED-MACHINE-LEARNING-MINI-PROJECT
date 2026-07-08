@@ -425,7 +425,7 @@ Healthcare Suggestions
 
 # 👩‍💻 Contributors
 
-Developed as part of the **Applied Machine Learning Project**.
+Developed as part of the **Applied Machine Learning Mini Project**.
 
 **Team Members:**
 
